@@ -1,10 +1,13 @@
-<h1>Parent Dashboard</h1>
-<p>Welcome to the Music School Management System.</p>
+@extends('layouts.dashboard')
 
-<form method="POST" action="{{ route('logout') }}">
-    @csrf
+@section('title', 'Parent Dashboard')
+@section('page-heading', 'Parent Portal')
 
-    <button type="submit" class="btn btn-danger">
-        Logout
-    </button>
-</form>
+@section('content')
+    <div class="content-card">
+        <h4>Welcome, {{ auth()->user()->name }}!</h4>
+        <p class="text-muted">
+            Your children's profiles, bookings and lesson schedules will appear here.
+        </p>
+    </div>
+@endsection
