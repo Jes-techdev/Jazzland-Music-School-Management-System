@@ -1,0 +1,571 @@
+<?php
+
+namespace App\Http\Controllers\Manager;
+
+use App\Http\Controllers\Controller;
+use App\Models\Appointment;
+use App\Models\AppointmentHistory;
+use App\Models\Course;
+use App\Models\Instructor;
+use App\Models\Student;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+
+class AppointmentController extends Controller
+{
+    public function index()
+    {
+        $appointments = Appointment::with([
+            'course',
+            'students',
+            'instructors',
+        ])
+            ->latest('start_at')
+            ->paginate(15);
+
+        return view('manager.appointments.index', compact('appointments'));
+    }
+
+    public function create()
+    {
+        $courses = Course::where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        $instructors = Instructor::where('status', 'active')
+            ->orderBy('first_name')
+            ->get();
+
+        $students = Student::where('status', 'active')
+            ->orderBy('first_name')
+            ->get();
+
+        return view('manager.appointments.create', compact(
+            'courses',
+            'instructors',
+            'students'
+        ));
+    }
+
+    public function store(Request $request)
+    {
+        $data = $request->validate([
+            'course_id' => ['required', 'exists:courses,id'],
+            'appointment_type' => ['required', 'in:individual,group'],
+            'start_at' => ['required', 'date'],
+            'end_at' => ['required', 'date', 'after:start_at'],
+            'capacity' => ['nullable', 'integer', 'min:1'],
+            'location' => ['nullable', 'string', 'max:255'],
+            'notes' => ['nullable', 'string'],
+            'student_ids' => ['required', 'array', 'min:1'],
+            'student_ids.*' => ['required', 'distinct', 'exists:students,id'],
+            'instructor_ids' => ['required', 'array', 'min:1'],
+            'instructor_ids.*' => ['required', 'distinct', 'exists:instructors,id'],
+        ]);
+
+        $start = Carbon::parse($data['start_at']);
+        $end = Carbon::parse($data['end_at']);
+
+        if (!$start->isSameDay($end)) {
+            throw ValidationException::withMessages([
+                'end_at' => 'An appointment must start and finish on the same day.',
+            ]);
+        }
+
+        if ($end->lessThanOrEqualTo($start)) {
+            throw ValidationException::withMessages([
+                'end_at' => 'The appointment end time must be after its start time.',
+            ]);
+        }
+
+        if (
+            $data['appointment_type'] === 'individual'
+            && count($data['student_ids']) !== 1
+        ) {
+            throw ValidationException::withMessages([
+                'student_ids' => 'An individual appointment must have exactly one student.',
+            ]);
+        }
+
+        $course = Course::with('instruments')->findOrFail($data['course_id']);
+
+        if (!$course->is_active) {
+            throw ValidationException::withMessages([
+                'course_id' => 'This course is currently inactive.',
+            ]);
+        }
+
+        if (
+            ! in_array($course->lesson_type, [
+                $data['appointment_type'],
+                'both',
+            ], true)
+        ) {
+            throw ValidationException::withMessages([
+                'course_id' => 'This course does not support the selected appointment type.',
+            ]);
+        }
+
+        $capacity = $data['appointment_type'] === 'individual'
+            ? 1
+            : ($data['capacity'] ?? $course->default_capacity);
+
+        if (! $capacity) {
+            throw ValidationException::withMessages([
+                'capacity' => 'Please specify a capacity for this group appointment.',
+            ]);
+        }
+
+        if (count($data['student_ids']) > $capacity) {
+            throw ValidationException::withMessages([
+                'student_ids' => 'The number of students exceeds the appointment capacity.',
+            ]);
+        }
+
+        DB::transaction(function () use ($data, $course, $start, $end, $capacity) {
+            // Lock instructor records while checking and creating the booking.
+            $instructors = Instructor::whereIn('id', $data['instructor_ids'])
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
+            if (
+                $instructors->count() !== count($data['instructor_ids'])
+                || $instructors->contains(fn ($instructor) => $instructor->status !== 'active')
+            ) {
+                throw ValidationException::withMessages([
+                    'instructor_ids' => 'One or more selected instructors are unavailable.',
+                ]);
+            }
+
+            $students = Student::whereIn('id', $data['student_ids'])
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
+            if (
+                $students->count() !== count($data['student_ids'])
+                || $students->contains(fn ($student) => $student->status !== 'active')
+            ) {
+                throw ValidationException::withMessages([
+                    'student_ids' => 'One or more selected students are inactive or unavailable.',
+                ]);
+            }
+
+            // Check instructor qualifications and weekly availability.
+            $courseInstrumentIds = $course->instruments->pluck('id');
+
+            foreach ($instructors as $instructor) {
+                if ($courseInstrumentIds->isNotEmpty()) {
+                    $hasMatchingInstrument = $instructor->instruments()
+                        ->whereIn('instruments.id', $courseInstrumentIds)
+                        ->exists();
+
+                    if (! $hasMatchingInstrument) {
+                        throw ValidationException::withMessages([
+                            'instructor_ids' => "{$instructor->first_name} {$instructor->last_name} does not have a required course instrument.",
+                        ]);
+                    }
+                }
+
+                $hasAvailability = $instructor->availabilities()
+                    ->where('day_of_week', $start->dayOfWeek)
+                    ->where('is_available', true)
+                    ->where('start_time', '<=', $start->format('H:i:s'))
+                    ->where('end_time', '>=', $end->format('H:i:s'))
+                    ->exists();
+
+                if (! $hasAvailability) {
+                    throw ValidationException::withMessages([
+                        'instructor_ids' => "{$instructor->first_name} {$instructor->last_name} is not available for the selected time.",
+                    ]);
+                }
+
+                // Check for overlapping appointments.
+                $appointmentConflict = Appointment::whereIn('status', ['pending', 'confirmed'])
+                    ->where('start_at', '<', $end)
+                    ->where('end_at', '>', $start)
+                    ->whereHas('instructors', function ($query) use ($instructor) {
+                        $query->where('instructors.id', $instructor->id);
+                    })
+                    ->exists();
+
+                if ($appointmentConflict) {
+                    throw ValidationException::withMessages([
+                        'instructor_ids' => "{$instructor->first_name} {$instructor->last_name} already has an appointment during this time.",
+                    ]);
+                }
+
+                // Check for overlapping vacation programme sessions.
+                $programmeConflict = DB::table('programme_sessions')
+                    ->where('instructor_id', $instructor->id)
+                    ->where('session_date', $start->toDateString())
+                    ->where('status', 'scheduled')
+                    ->where('start_time', '<', $end->format('H:i:s'))
+                    ->where('end_time', '>', $start->format('H:i:s'))
+                    ->exists();
+
+                if ($programmeConflict) {
+                    throw ValidationException::withMessages([
+                        'instructor_ids' => "{$instructor->first_name} {$instructor->last_name} has a vacation programme session during this time.",
+                    ]);
+                }
+            }
+
+            // Check whether any selected student already has an appointment.
+            foreach ($students as $student) {
+                $studentConflict = Appointment::whereIn('status', ['pending', 'confirmed'])
+                    ->where('start_at', '<', $end)
+                    ->where('end_at', '>', $start)
+                    ->whereHas('students', function ($query) use ($student) {
+                        $query->where('students.id', $student->id);
+                    })
+                    ->exists();
+
+                if ($studentConflict) {
+                    throw ValidationException::withMessages([
+                        'student_ids' => "{$student->first_name} {$student->last_name} already has an appointment during this time.",
+                    ]);
+                }
+            }
+
+            $appointment = Appointment::create([
+                'course_id' => $course->id,
+                'appointment_type' => $data['appointment_type'],
+                'start_at' => $start,
+                'end_at' => $end,
+                'capacity' => $capacity,
+                'status' => 'confirmed',
+                'location' => $data['location'] ?? null,
+                'notes' => $data['notes'] ?? null,
+                'created_by' => auth()->id(),
+                'requested_by' => null,
+            ]);
+
+            $appointment->students()->sync($data['student_ids']);
+            $appointment->instructors()->sync($data['instructor_ids']);
+
+            AppointmentHistory::create([
+                'appointment_id' => $appointment->id,
+                'user_id' => auth()->id(),
+                'action' => 'created',
+                'new_status' => 'confirmed',
+                'notes' => 'Appointment created by manager.',
+            ]);
+        });
+
+        return redirect()
+            ->route('manager.appointments.index')
+            ->with('success', 'Appointment created successfully.');
+    }
+
+    public function show(Appointment $appointment)
+    {
+        $appointment->load([
+            'course',
+            'students',
+            'instructors',
+            'history.user',
+        ]);
+
+        return view('manager.appointments.show', compact('appointment'));
+    }
+
+
+    public function edit(Appointment $appointment)
+    {
+        $appointment->load(['students', 'instructors']);
+
+        if (in_array($appointment->status, ['cancelled', 'completed', 'no_show'], true)) {
+            return redirect()
+                ->route('manager.appointments.show', $appointment)
+                ->with('error', 'This appointment can no longer be edited.');
+        }
+
+        $courses = Course::where('is_active', true)->orderBy('name')->get();
+        $instructors = Instructor::where('status', 'active')->orderBy('first_name')->get();
+        $students = Student::where('status', 'active')->orderBy('first_name')->get();
+
+        return view('manager.appointments.edit', compact(
+            'appointment',
+            'courses',
+            'instructors',
+            'students'
+        ));
+    }
+
+    public function update(Request $request, Appointment $appointment)
+    {
+        if (in_array($appointment->status, ['cancelled', 'completed', 'no_show'], true)) {
+            return back()->with('error', 'This appointment can no longer be edited.');
+        }
+
+        $data = $request->validate([
+            'course_id' => ['required', 'exists:courses,id'],
+            'appointment_type' => ['required', 'in:individual,group'],
+            'start_at' => ['required', 'date'],
+            'end_at' => ['required', 'date', 'after:start_at'],
+            'capacity' => ['nullable', 'integer', 'min:1'],
+            'location' => ['nullable', 'string', 'max:255'],
+            'notes' => ['nullable', 'string'],
+            'student_ids' => ['required', 'array', 'min:1'],
+            'student_ids.*' => ['required', 'distinct', 'exists:students,id'],
+            'instructor_ids' => ['required', 'array', 'min:1'],
+            'instructor_ids.*' => ['required', 'distinct', 'exists:instructors,id'],
+        ]);
+
+        $start = Carbon::parse($data['start_at']);
+        $end = Carbon::parse($data['end_at']);
+
+        if (!$start->isSameDay($end)) {
+            throw ValidationException::withMessages([
+                'end_at' => 'An appointment must start and finish on the same day.',
+            ]);
+        }
+
+        if ($data['appointment_type'] === 'individual' && count($data['student_ids']) !== 1) {
+            throw ValidationException::withMessages([
+                'student_ids' => 'An individual appointment must have exactly one student.',
+            ]);
+        }
+
+        $course = Course::with('instruments')->findOrFail($data['course_id']);
+
+        if (!$course->is_active) {
+            throw ValidationException::withMessages([
+                'course_id' => 'This course is currently inactive.',
+            ]);
+        }
+
+        if (! in_array($course->lesson_type, [$data['appointment_type'], 'both'], true)) {
+            throw ValidationException::withMessages([
+                'course_id' => 'This course does not support the selected appointment type.',
+            ]);
+        }
+
+        $capacity = $data['appointment_type'] === 'individual'
+            ? 1
+            : ($data['capacity'] ?? $course->default_capacity);
+
+        if (! $capacity || count($data['student_ids']) > $capacity) {
+            throw ValidationException::withMessages([
+                'capacity' => 'The capacity is missing or fewer than the selected students.',
+            ]);
+        }
+
+        DB::transaction(function () use ($data, $appointment, $course, $start, $end, $capacity) {
+            $appointment = Appointment::whereKey($appointment->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $instructors = Instructor::whereIn('id', $data['instructor_ids'])
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
+            $students = Student::whereIn('id', $data['student_ids'])
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
+            if (
+                $instructors->count() !== count($data['instructor_ids'])
+                || $instructors->contains(fn ($i) => $i->status !== 'active')
+            ) {
+                throw ValidationException::withMessages([
+                    'instructor_ids' => 'One or more instructors are inactive.',
+                ]);
+            }
+
+            if (
+                $students->count() !== count($data['student_ids'])
+                || $students->contains(fn ($s) => $s->status !== 'active')
+            ) {
+                throw ValidationException::withMessages([
+                    'student_ids' => 'One or more students are inactive.',
+                ]);
+            }
+
+            $instrumentIds = $course->instruments->pluck('id');
+
+            foreach ($instructors as $instructor) {
+                if (
+                    $instrumentIds->isNotEmpty()
+                    && ! $instructor->instruments()
+                        ->whereIn('instruments.id', $instrumentIds)
+                        ->exists()
+                ) {
+                    throw ValidationException::withMessages([
+                        'instructor_ids' => "{$instructor->first_name} {$instructor->last_name} lacks a required course instrument.",
+                    ]);
+                }
+
+                $available = $instructor->availabilities()
+                    ->where('day_of_week', $start->dayOfWeek)
+                    ->where('is_available', true)
+                    ->where('start_time', '<=', $start->format('H:i:s'))
+                    ->where('end_time', '>=', $end->format('H:i:s'))
+                    ->exists();
+
+                if (! $available) {
+                    throw ValidationException::withMessages([
+                        'instructor_ids' => "{$instructor->first_name} {$instructor->last_name} is not available at that time.",
+                    ]);
+                }
+
+                $conflict = Appointment::whereIn('status', ['pending', 'confirmed'])
+                    ->where('id', '!=', $appointment->id)
+                    ->where('start_at', '<', $end)
+                    ->where('end_at', '>', $start)
+                    ->whereHas('instructors', fn ($q) => $q->where('instructors.id', $instructor->id))
+                    ->exists();
+
+                if ($conflict) {
+                    throw ValidationException::withMessages([
+                        'instructor_ids' => "{$instructor->first_name} {$instructor->last_name} has another appointment at that time.",
+                    ]);
+                }
+
+                $programmeConflict = DB::table('programme_sessions')
+                    ->where('instructor_id', $instructor->id)
+                    ->where('session_date', $start->toDateString())
+                    ->where('status', 'scheduled')
+                    ->where('start_time', '<', $end->format('H:i:s'))
+                    ->where('end_time', '>', $start->format('H:i:s'))
+                    ->exists();
+
+                if ($programmeConflict) {
+                    throw ValidationException::withMessages([
+                        'instructor_ids' => "{$instructor->first_name} {$instructor->last_name} has a programme session at that time.",
+                    ]);
+                }
+            }
+
+            foreach ($students as $student) {
+                $conflict = Appointment::whereIn('status', ['pending', 'confirmed'])
+                    ->where('id', '!=', $appointment->id)
+                    ->where('start_at', '<', $end)
+                    ->where('end_at', '>', $start)
+                    ->whereHas('students', fn ($q) => $q->where('students.id', $student->id))
+                    ->exists();
+
+                if ($conflict) {
+                    throw ValidationException::withMessages([
+                        'student_ids' => "{$student->first_name} {$student->last_name} has another appointment at that time.",
+                    ]);
+                }
+            }
+
+            $oldStart = $appointment->start_at->format('Y-m-d H:i:s');
+            $oldEnd = $appointment->end_at->format('Y-m-d H:i:s');
+            $oldCourse = $appointment->course_id;
+
+            $appointment->update([
+                'course_id' => $course->id,
+                'appointment_type' => $data['appointment_type'],
+                'start_at' => $start,
+                'end_at' => $end,
+                'capacity' => $capacity,
+                'location' => $data['location'] ?? null,
+                'notes' => $data['notes'] ?? null,
+            ]);
+
+            $appointment->students()->sync($data['student_ids']);
+            $appointment->instructors()->sync($data['instructor_ids']);
+
+            $appointment->history()->create([
+                'user_id' => auth()->id(),
+                'action' => 'updated',
+                'notes' => 'Appointment details updated. Previous time: '
+                    . $oldStart . ' to ' . $oldEnd
+                    . '. Previous course ID: ' . $oldCourse,
+            ]);
+        });
+
+        return redirect()
+            ->route('manager.appointments.show', $appointment)
+            ->with('success', 'Appointment updated successfully.');
+    }
+
+    public function cancel(Request $request, Appointment $appointment)
+    {
+        $data = $request->validate([
+            'cancellation_reason' => ['required', 'string', 'max:2000'],
+        ]);
+
+        if (in_array($appointment->status, ['cancelled', 'completed', 'no_show'], true)) {
+            return back()->with('error', 'This appointment cannot be cancelled.');
+        }
+
+        DB::transaction(function () use ($appointment, $data) {
+            $oldStatus = $appointment->status;
+
+            $appointment->update([
+                'status' => 'cancelled',
+                'cancellation_reason' => $data['cancellation_reason'],
+            ]);
+
+            $appointment->history()->create([
+                'user_id' => auth()->id(),
+                'action' => 'cancelled',
+                'old_status' => $oldStatus,
+                'new_status' => 'cancelled',
+                'notes' => $data['cancellation_reason'],
+            ]);
+        });
+
+        return redirect()
+            ->route('manager.appointments.show', $appointment)
+            ->with('success', 'Appointment cancelled successfully.');
+    }
+
+        
+    public function updateStatus(Request $request, Appointment $appointment)
+    {
+        $data = $request->validate([
+            'status' => ['required', 'in:confirmed,completed,no_show'],
+        ]);
+
+        return DB::transaction(function () use ($data, $appointment) {
+            $appointment = Appointment::whereKey($appointment->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (in_array($appointment->status, ['cancelled', 'completed', 'no_show'], true)) {
+                return back()->with('error', 'This appointment is already closed.');
+            }
+
+            $newStatus = $data['status'];
+
+            if (
+                in_array($newStatus, ['completed', 'no_show'], true)
+                && now()->lessThan($appointment->end_at)
+            ) {
+                return back()->with(
+                    'error',
+                    'An appointment cannot be completed or marked as no-show before its scheduled end time.'
+                );
+            }
+
+            $oldStatus = $appointment->status;
+
+            $appointment->update([
+                'status' => $newStatus,
+            ]);
+
+            $appointment->history()->create([
+                'user_id' => auth()->id(),
+                'action' => 'status_changed',
+                'old_status' => $oldStatus,
+                'new_status' => $newStatus,
+                'notes' => 'Appointment status updated by manager.',
+            ]);
+
+            return back()->with('success', 'Appointment status updated.');
+        });
+    }
+
+
+}

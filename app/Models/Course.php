@@ -25,4 +25,9 @@ class Course extends Model
         return $this->belongsToMany(Instrument::class)
             ->withTimestamps();
     }
+
+    public function appointments()
+    {
+        return $this->hasMany(Appointment::class);
+    }
 }

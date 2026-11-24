@@ -33,4 +33,10 @@ class Student extends Model
             ->withPivot('relationship_type', 'is_primary')
             ->withTimestamps();
     }
+
+    public function appointments()
+    {
+        return $this->belongsToMany(Appointment::class)
+            ->withTimestamps();
+    }
 }

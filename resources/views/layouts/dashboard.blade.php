@@ -155,9 +155,10 @@
         <span>Vacation Programmes</span>
     </a>
 
-    <a href="#" title="Coming soon">
+    <a href="{{ auth()->user()->role->name === 'manager' ? route('manager.appointments.index') : '#'}}"
+    class="nav-link">
         <i class="bi bi-calendar-check"></i>
-        <span class="menu-text"> Appointments</span>
+        Appointments
     </a>
 
     <hr class="border-secondary">

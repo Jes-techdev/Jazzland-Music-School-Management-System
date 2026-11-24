@@ -8,6 +8,7 @@ use App\Http\Controllers\Manager\InstructorAvailabilityController;
 use App\Http\Controllers\Manager\CourseController;
 use App\Http\Controllers\Manager\ProgrammeSessionController;
 use App\Http\Controllers\Manager\ProgrammeEnrolmentController;
+use App\Http\Controllers\Manager\AppointmentController;
 
 Route::get('/', function(){
     return view('welcome');
@@ -121,6 +122,15 @@ Route::middleware(['auth', 'role:manager'])
             'programmes/{programme}/enrolments/{enrolment}/status',
             [ProgrammeEnrolmentController::class, 'updateStatus']
         )->name('programmes.enrolments.status');
+
+        Route::resource('appointments', AppointmentController::class)
+        ->only(['index', 'create', 'store', 'show', 'edit', 'update']);
+
+        Route::post('appointments/{appointment}/cancel', [AppointmentController::class, 'cancel'])
+            ->name('appointments.cancel');
+
+        Route::patch('appointments/{appointment}/status', [AppointmentController::class, 'updateStatus'])
+            ->name('appointments.status');
 
 });
 

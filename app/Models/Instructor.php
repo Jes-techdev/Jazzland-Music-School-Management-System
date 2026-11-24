@@ -35,4 +35,10 @@ class Instructor extends Model
     {
         return $this->hasMany(InstructorAvailability::class);
     }
+
+    public function appointments()
+    {
+        return $this->belongsToMany(Appointment::class)
+            ->withTimestamps();
+    }
 }
