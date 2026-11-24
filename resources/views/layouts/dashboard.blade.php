@@ -162,6 +162,12 @@
         Appointments
     </a>
 
+    <a href="{{ auth()->user()->role->name === 'manager' ? route('manager.appointments.requests') : '#'}}"
+    class="nav-link">
+        <i class="bi bi-inbox me-2"></i>
+        Booking Requests
+    </a>
+
     <hr class="border-secondary">
 
     <a href="#" title="Coming soon">

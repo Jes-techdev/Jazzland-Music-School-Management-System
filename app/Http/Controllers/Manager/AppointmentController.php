@@ -540,6 +540,16 @@ class AppointmentController extends Controller
             $newStatus = $data['status'];
 
             if (
+                $newStatus === 'confirmed'
+                && ! $appointment->instructors()->exists()
+            ) {
+                return back()->with(
+                    'error',
+                    'Please assign at least one instructor before confirming this appointment.'
+                );
+            }
+
+            if (
                 in_array($newStatus, ['completed', 'no_show'], true)
                 && now()->lessThan($appointment->end_at)
             ) {
@@ -565,6 +575,20 @@ class AppointmentController extends Controller
 
             return back()->with('success', 'Appointment status updated.');
         });
+    }
+
+    public function requests()
+    {
+        $appointments = Appointment::with([
+            'course',
+            'students',
+            'instructors',
+        ])
+            ->whereNotNull('requested_by')
+            ->latest()
+            ->paginate(15);
+
+        return view('manager.appointments.requests', compact('appointments'));
     }
 
 

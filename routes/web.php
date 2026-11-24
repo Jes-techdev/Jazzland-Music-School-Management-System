@@ -12,6 +12,7 @@ use App\Http\Controllers\Manager\AppointmentController;
 use App\Http\Controllers\PublicBookingController;
 use App\Http\Controllers\ParentPortalController;
 use App\Http\Controllers\ParentProgrammeEnrolmentController;
+use App\Http\Controllers\ParentAppointmentController;
 
 // Route::get('/', function(){
 //     return view('welcome');
@@ -136,6 +137,11 @@ Route::middleware(['auth', 'role:manager'])
             [ProgrammeEnrolmentController::class, 'updateStatus']
         )->name('programmes.enrolments.status');
 
+        Route::get(
+            'appointments/requests',
+            [AppointmentController::class, 'requests']
+        )->name('appointments.requests');
+        
         Route::resource('appointments', AppointmentController::class)
         ->only(['index', 'create', 'store', 'show', 'edit', 'update']);
 
@@ -198,6 +204,18 @@ Route::middleware(['auth', 'role:parent'])
         Route::post('/programmes/{programme}/enrol', [
             ParentProgrammeEnrolmentController::class, 'store'
         ])->name('programmes.enrol.store');
+
+        Route::get('/appointments', [
+            ParentAppointmentController::class, 'index'
+        ])->name('appointments.index');
+        
+        Route::get('/appointments/create', [
+            ParentAppointmentController::class, 'create'
+        ])->name('appointments.create');
+        
+        Route::post('/appointments', [
+            ParentAppointmentController::class, 'store'
+        ])->name('appointments.store');
 });
 
 

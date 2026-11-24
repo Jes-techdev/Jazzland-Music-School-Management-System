@@ -18,6 +18,19 @@
             {{ $course->description ?: 'Discover this music course at our school.' }}
         </p>
 
+        @auth
+            @if(auth()->user()->role?->name === 'parent')
+                <a href="{{ route('parent.appointments.create', ['course_id' => $course->id]) }}"
+                class="btn btn-primary">
+                    Request This Course
+                </a>
+            @endif
+        @else
+            <a href="{{ route('register') }}" class="btn btn-primary">
+                Register to Request a Lesson
+            </a>
+        @endauth
+
         <hr>
 
         <div class="row">

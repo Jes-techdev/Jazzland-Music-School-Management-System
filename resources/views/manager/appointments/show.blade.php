@@ -19,6 +19,21 @@
 
 @if(!in_array($appointment->status, ['cancelled', 'completed', 'no_show']))
     <div class="d-flex flex-wrap gap-2 mb-4">
+        @if($appointment->status === 'pending')
+            <form method="POST"
+                action="{{ route('manager.appointments.status', $appointment) }}">
+                @csrf
+                @method('PATCH')
+
+                <input type="hidden" name="status" value="confirmed">
+
+                <button type="submit"
+                        class="btn btn-success"
+                        onclick="return confirm('Are you sure you want to confirm this appointment?')">
+                    <i class="bi bi-check-circle"></i> Confirm Appointment
+                </button>
+            </form>
+        @endif
 
         <a href="{{ route('manager.appointments.edit', $appointment) }}"
            class="btn btn-primary">

@@ -55,6 +55,14 @@
                             <a class="nav-link" href="{{ route('parent.profile') }}">
                                 My Profile
                             </a>
+
+                            <a class="nav-link" href="{{ route('parent.appointments.create') }}">
+                                Request a Lesson
+                            </a>
+
+                            <a class="nav-link" href="{{ route('parent.appointments.index') }}">
+                                My Lesson Requests
+                            </a>
                         @endif
 
                         <form method="POST" action="{{ route('logout') }}" class="d-inline">
