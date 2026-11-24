@@ -141,9 +141,8 @@
         <i class="bi bi-person-hearts"></i> Guardians
     </a>
 
-    <a href="#" title="Coming soon">
-        <i class="bi bi-person-workspace"></i>
-        <span class="menu-text"> Instructors</span>
+    <a href="{{ auth()->user()->role->name === 'manager' ? route('manager.instructors.index') : '#' }}">
+        <i class="bi bi-person-workspace"></i> Instructors
     </a>
 
     <a href="#" title="Coming soon">

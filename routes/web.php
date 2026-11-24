@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Manager\StudentController;
 use App\Http\Controllers\Manager\GuardianController;
+use App\Http\Controllers\Manager\InstructorController;
 
 Route::get('/', function(){
     return view('welcome');
@@ -43,6 +44,9 @@ Route::middleware(['auth', 'role:manager'])
         Route::put('/guardians/{guardian}/students',
             [GuardianController::class, 'updateStudents'])
             ->name('guardians.students.update');
+
+        Route::resource('instructors', InstructorController::class)
+        ->except(['destroy']);
 
 });
 
