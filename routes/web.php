@@ -5,6 +5,7 @@ use App\Http\Controllers\Manager\StudentController;
 use App\Http\Controllers\Manager\GuardianController;
 use App\Http\Controllers\Manager\InstructorController;
 use App\Http\Controllers\Manager\InstructorAvailabilityController;
+use App\Http\Controllers\Manager\CourseController;
 
 Route::get('/', function(){
     return view('welcome');
@@ -63,6 +64,9 @@ Route::middleware(['auth', 'role:manager'])
             'instructors/{instructor}/availability/{availability}',
             [InstructorAvailabilityController::class, 'destroy']
         )->name('instructors.availability.destroy');
+
+        Route::resource('courses', CourseController::class)
+        ->except(['destroy']);
 
 });
 

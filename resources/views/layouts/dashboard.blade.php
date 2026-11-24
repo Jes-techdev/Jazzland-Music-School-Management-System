@@ -145,9 +145,8 @@
         <i class="bi bi-person-workspace"></i> Instructors
     </a>
 
-    <a href="#" title="Coming soon">
-        <i class="bi bi-music-note-list"></i>
-        <span class="menu-text"> Courses</span>
+    <a href="{{ auth()->user()->role->name === 'manager' ? route('manager.courses.index') : '#' }}">
+        <i class="bi bi-music-note-list"></i> Courses
     </a>
 
     <a href="#" title="Coming soon">
