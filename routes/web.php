@@ -9,11 +9,24 @@ use App\Http\Controllers\Manager\CourseController;
 use App\Http\Controllers\Manager\ProgrammeSessionController;
 use App\Http\Controllers\Manager\ProgrammeEnrolmentController;
 use App\Http\Controllers\Manager\AppointmentController;
+use App\Http\Controllers\PublicBookingController;
+use App\Http\Controllers\ParentPortalController;
+use App\Http\Controllers\ParentProgrammeEnrolmentController;
 
-Route::get('/', function(){
-    return view('welcome');
-});
+// Route::get('/', function(){
+//     return view('welcome');
+// });
 
+Route::get('/', [PublicBookingController::class, 'index'])
+    ->name('public.home');
+
+Route::get('/courses/{course}', [PublicBookingController::class, 'showCourse'])
+    ->name('public.courses.show');
+
+Route::get('/programmes/{programme}', [PublicBookingController::class, 'showProgramme'])
+    ->name('public.programmes.show');
+
+    
 Route::get('/dashboard', function () {
 
     $role = auth()->user()->role?->name;
@@ -144,12 +157,49 @@ Route::middleware(['auth', 'role:instructor'])->group(function () {
 });
 
 
-Route::middleware(['auth', 'role:parent'])->group(function () {
 
-    Route::view('/parent/dashboard', 'dashboards.parent')
-        ->name('parent.dashboard');
+Route::middleware(['auth', 'role:parent'])
+    ->prefix('parent')
+    ->name('parent.')
+    ->group(function () {
 
+        Route::get('/dashboard', [ParentPortalController::class, 'dashboard'])
+            ->name('dashboard');
+
+        Route::get('/profile', [ParentPortalController::class, 'profile'])
+            ->name('profile');
+
+        Route::put('/profile', [ParentPortalController::class, 'updateProfile'])
+            ->name('profile.update');
+
+        Route::get('/students', [ParentPortalController::class, 'students'])
+            ->name('students.index');
+
+        Route::get('/students/create', [ParentPortalController::class, 'createStudent'])
+            ->name('students.create');
+
+        Route::post('/students', [ParentPortalController::class, 'storeStudent'])
+            ->name('students.store');
+
+        Route::get('/students/{student}/edit', [ParentPortalController::class, 'editStudent'])
+            ->name('students.edit');
+
+        Route::put('/students/{student}', [ParentPortalController::class, 'updateStudent'])
+            ->name('students.update');
+        
+        Route::get('/programmes', [
+            ParentProgrammeEnrolmentController::class, 'index'
+        ])->name('programmes.index');
+        
+        Route::get('/programmes/{programme}/enrol', [
+            ParentProgrammeEnrolmentController::class, 'create'
+        ])->name('programmes.enrol');
+        
+        Route::post('/programmes/{programme}/enrol', [
+            ParentProgrammeEnrolmentController::class, 'store'
+        ])->name('programmes.enrol.store');
 });
+
 
 
 Route::middleware(['auth', 'role:student'])->group(function () {
