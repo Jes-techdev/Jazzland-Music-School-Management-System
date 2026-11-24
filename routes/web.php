@@ -6,6 +6,7 @@ use App\Http\Controllers\Manager\GuardianController;
 use App\Http\Controllers\Manager\InstructorController;
 use App\Http\Controllers\Manager\InstructorAvailabilityController;
 use App\Http\Controllers\Manager\CourseController;
+use App\Http\Controllers\Manager\ProgrammeSessionController;
 
 Route::get('/', function(){
     return view('welcome');
@@ -67,6 +68,38 @@ Route::middleware(['auth', 'role:manager'])
 
         Route::resource('courses', CourseController::class)
         ->except(['destroy']);
+
+        Route::resource('programmes', \App\Http\Controllers\Manager\ProgrammeController::class)
+        ->except('destroy');
+
+        Route::patch('programmes/{programme}/status',
+            [\App\Http\Controllers\Manager\ProgrammeController::class, 'updateStatus']
+        )->name('programmes.status');
+
+        Route::get(
+            'programmes/{programme}/sessions/create',
+            [ProgrammeSessionController::class, 'create']
+        )->name('programmes.sessions.create');
+        
+        Route::post(
+            'programmes/{programme}/sessions',
+            [ProgrammeSessionController::class, 'store']
+        )->name('programmes.sessions.store');
+
+        Route::get(
+            'programmes/{programme}/sessions/{session}/edit',
+            [ProgrammeSessionController::class, 'edit']
+        )->name('programmes.sessions.edit');
+        
+        Route::put(
+            'programmes/{programme}/sessions/{session}',
+            [ProgrammeSessionController::class, 'update']
+        )->name('programmes.sessions.update');
+        
+        Route::patch(
+            'programmes/{programme}/sessions/{session}/cancel',
+            [ProgrammeSessionController::class, 'cancel']
+        )->name('programmes.sessions.cancel');
 
 });
 

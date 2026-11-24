@@ -149,9 +149,10 @@
         <i class="bi bi-music-note-list"></i> Courses
     </a>
 
-    <a href="#" title="Coming soon">
+    <a href="{{ auth()->user()->role->name === 'manager' ? route('manager.programmes.index') : '#'}}"
+        class="sidebar-link">
         <i class="bi bi-calendar-event"></i>
-        <span class="menu-text"> Programmes</span>
+        <span>Vacation Programmes</span>
     </a>
 
     <a href="#" title="Coming soon">
