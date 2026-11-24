@@ -94,7 +94,7 @@
 
             <div class="text-center py-5">
                 <i class="bi bi-calendar3 text-muted"
-                   style="font-size: 45px;"></i>
+                    style="font-size: 45px;"></i>
 
                 <h6 class="mt-3">No appointment data yet</h6>
 
@@ -114,7 +114,7 @@
 
             <div class="text-center py-4">
                 <i class="bi bi-inbox text-muted"
-                   style="font-size: 40px;"></i>
+                    style="font-size: 40px;"></i>
 
                 <p class="text-muted mt-3 mb-0">
                     Booking requests will appear here.
