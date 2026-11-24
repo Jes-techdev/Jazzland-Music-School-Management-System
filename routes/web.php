@@ -7,6 +7,7 @@ use App\Http\Controllers\Manager\InstructorController;
 use App\Http\Controllers\Manager\InstructorAvailabilityController;
 use App\Http\Controllers\Manager\CourseController;
 use App\Http\Controllers\Manager\ProgrammeSessionController;
+use App\Http\Controllers\Manager\ProgrammeEnrolmentController;
 
 Route::get('/', function(){
     return view('welcome');
@@ -100,6 +101,26 @@ Route::middleware(['auth', 'role:manager'])
             'programmes/{programme}/sessions/{session}/cancel',
             [ProgrammeSessionController::class, 'cancel']
         )->name('programmes.sessions.cancel');
+
+        Route::get(
+            'programmes/{programme}/enrolments',
+            [ProgrammeEnrolmentController::class, 'index']
+        )->name('programmes.enrolments.index');
+        
+        Route::get(
+            'programmes/{programme}/enrolments/create',
+            [ProgrammeEnrolmentController::class, 'create']
+        )->name('programmes.enrolments.create');
+        
+        Route::post(
+            'programmes/{programme}/enrolments',
+            [ProgrammeEnrolmentController::class, 'store']
+        )->name('programmes.enrolments.store');
+        
+        Route::patch(
+            'programmes/{programme}/enrolments/{enrolment}/status',
+            [ProgrammeEnrolmentController::class, 'updateStatus']
+        )->name('programmes.enrolments.status');
 
 });
 

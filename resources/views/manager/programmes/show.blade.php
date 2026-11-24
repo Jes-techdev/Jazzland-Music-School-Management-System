@@ -16,6 +16,11 @@
 
             <a href="{{ route('manager.programmes.index') }}"
                 class="btn btn-outline-secondary">Back</a>
+
+            <a href="{{ route('manager.programmes.enrolments.index', $programme) }}"
+                class="btn btn-outline-primary">
+                <i class="bi bi-people"></i> Manage Enrolments
+            </a>
         </div>
     </div>
 
