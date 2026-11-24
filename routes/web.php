@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Manager\StudentController;
 use App\Http\Controllers\Manager\GuardianController;
 use App\Http\Controllers\Manager\InstructorController;
+use App\Http\Controllers\Manager\InstructorAvailabilityController;
 
 Route::get('/', function(){
     return view('welcome');
@@ -47,6 +48,21 @@ Route::middleware(['auth', 'role:manager'])
 
         Route::resource('instructors', InstructorController::class)
         ->except(['destroy']);
+
+        Route::get(
+            'instructors/{instructor}/availability',
+            [InstructorAvailabilityController::class, 'index']
+        )->name('instructors.availability.index');
+        
+        Route::post(
+            'instructors/{instructor}/availability',
+            [InstructorAvailabilityController::class, 'store']
+        )->name('instructors.availability.store');
+        
+        Route::delete(
+            'instructors/{instructor}/availability/{availability}',
+            [InstructorAvailabilityController::class, 'destroy']
+        )->name('instructors.availability.destroy');
 
 });
 

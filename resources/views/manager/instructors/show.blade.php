@@ -11,7 +11,13 @@
     </div>
 
     <a href="{{ route('manager.instructors.edit', $instructor) }}"
-       class="btn btn-primary">Edit Instructor</a>
+        class="btn btn-primary">Edit Instructor
+    </a>
+
+    <a href="{{ route('manager.instructors.availability.index', $instructor) }}"
+        class="btn btn-outline-primary">
+        <i class="bi bi-calendar-week"></i> Manage Availability
+    </a>
 </div>
 
 <div class="content-card">

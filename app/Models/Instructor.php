@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Instructor extends Model
 {
@@ -28,5 +29,10 @@ class Instructor extends Model
     {
         return $this->belongsToMany(Instrument::class)
             ->withTimestamps();
+    }
+
+    public function availabilities(): HasMany
+    {
+        return $this->hasMany(InstructorAvailability::class);
     }
 }
