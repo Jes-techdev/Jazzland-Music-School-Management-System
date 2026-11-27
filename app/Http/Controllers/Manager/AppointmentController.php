@@ -12,6 +12,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use App\Notifications\InstructorMessageNotification;
 
 class AppointmentController extends Controller
 {
@@ -124,8 +125,7 @@ class AppointmentController extends Controller
             ]);
         }
 
-        DB::transaction(function () use ($data, $course, $start, $end, $capacity) {
-            // Lock instructor records while checking and creating the booking.
+        $appointment = DB::transaction(function () use ($data, $course, $start, $end, $capacity) {            // Lock instructor records while checking and creating the booking.
             $instructors = Instructor::whereIn('id', $data['instructor_ids'])
                 ->orderBy('id')
                 ->lockForUpdate()
@@ -254,7 +254,21 @@ class AppointmentController extends Controller
                 'new_status' => 'confirmed',
                 'notes' => 'Appointment created by manager.',
             ]);
+
+            return $appointment;
         });
+
+        $this->notifyAssignedInstructors(
+            $appointment,
+            'New Lesson Assigned',
+            'You have been assigned to '
+                . $appointment->course->name
+                . ' on '
+                . $appointment->start_at->format('d M Y')
+                . ' at '
+                . $appointment->start_at->format('h:i A')
+                . '.'
+        );
 
         return redirect()
             ->route('manager.appointments.index')
@@ -355,7 +369,21 @@ class AppointmentController extends Controller
             ]);
         }
 
-        DB::transaction(function () use ($data, $appointment, $course, $start, $end, $capacity) {
+        $shouldNotify = false;
+        $oldStart = null;
+        $oldEnd = null;
+
+        DB::transaction(function () use (
+            $data,
+            $appointment,
+            $course,
+            $start,
+            $end,
+            $capacity,
+            &$shouldNotify,
+            &$oldStart,
+            &$oldEnd
+        ) {
             $appointment = Appointment::whereKey($appointment->id)
                 ->lockForUpdate()
                 ->firstOrFail();
@@ -468,6 +496,12 @@ class AppointmentController extends Controller
             $oldEnd = $appointment->end_at->format('Y-m-d H:i:s');
             $oldCourse = $appointment->course_id;
 
+            // Determine whether the appointment has actually been rescheduled.
+            $shouldNotify = (
+                $oldStart !== $start->format('Y-m-d H:i:s')
+                || $oldEnd !== $end->format('Y-m-d H:i:s')
+            );
+
             $appointment->update([
                 'course_id' => $course->id,
                 'appointment_type' => $data['appointment_type'],
@@ -490,11 +524,34 @@ class AppointmentController extends Controller
             ]);
         });
 
+        // Send notifications only after the transaction succeeds.
+        if ($shouldNotify) {
+            $appointment->refresh();
+        
+            $this->notifyAssignedInstructors(
+                $appointment,
+                'Lesson Rescheduled',
+                'Your lesson for '
+                    . $appointment->course->name
+                    . ' has been rescheduled. Previous schedule: '
+                    . \Carbon\Carbon::parse($oldStart)->format('d M Y, h:i A')
+                    . ' to '
+                    . \Carbon\Carbon::parse($oldEnd)->format('h:i A')
+                    . '. New schedule: '
+                    . $appointment->start_at->format('d M Y, h:i A')
+                    . ' to '
+                    . $appointment->end_at->format('h:i A')
+                    . '.'
+            );
+        }
+        
         return redirect()
             ->route('manager.appointments.show', $appointment)
             ->with('success', 'Appointment updated successfully.');
+
     }
 
+    
     public function cancel(Request $request, Appointment $appointment)
     {
         $data = $request->validate([
@@ -506,6 +563,16 @@ class AppointmentController extends Controller
         }
 
         DB::transaction(function () use ($appointment, $data) {
+            $appointment = Appointment::whereKey($appointment->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (in_array($appointment->status, ['cancelled', 'completed', 'no_show'], true)) {
+                throw ValidationException::withMessages([
+                    'appointment' => 'This appointment can no longer be cancelled.',
+                ]);
+            }
+
             $oldStatus = $appointment->status;
 
             $appointment->update([
@@ -522,10 +589,27 @@ class AppointmentController extends Controller
             ]);
         });
 
+        // Notify assigned instructors after the transaction commits.
+        $appointment->refresh();
+
+        $this->notifyAssignedInstructors(
+            $appointment,
+            'Lesson Cancelled',
+            'Your lesson for '
+                . $appointment->course->name
+                . ' scheduled for '
+                . $appointment->start_at->format('d M Y')
+                . ' at '
+                . $appointment->start_at->format('h:i A')
+                . ' has been cancelled. Reason: '
+                . $appointment->cancellation_reason
+        );
+
         return redirect()
             ->route('manager.appointments.show', $appointment)
             ->with('success', 'Appointment cancelled successfully.');
     }
+
 
         
     
@@ -535,7 +619,9 @@ class AppointmentController extends Controller
             'status' => ['required', 'in:confirmed,completed,no_show'],
         ]);
 
-        return DB::transaction(function () use ($data, $appointment) {
+        $shouldNotify = false;
+
+        $response = DB::transaction(function () use ($data, $appointment, &$shouldNotify) {
 
             $appointment = Appointment::whereKey($appointment->id)
                 ->lockForUpdate()
@@ -755,6 +841,11 @@ class AppointmentController extends Controller
                 'status' => $newStatus,
             ]);
 
+            // Notify instructors only when a booking is newly confirmed.
+            if ($oldStatus !== 'confirmed' && $newStatus === 'confirmed') {
+                $shouldNotify = true;
+            }
+
             $appointment->history()->create([
                 'user_id' => auth()->id(),
                 'action' => 'status_changed',
@@ -765,8 +856,25 @@ class AppointmentController extends Controller
 
             return back()->with('success', 'Appointment status updated.');
         });
+        
+        if ($shouldNotify) {
+            $appointment->refresh();
+        
+            $this->notifyAssignedInstructors(
+                $appointment,
+                'Booking Confirmed',
+                'Your booking for '
+                    . $appointment->course->name
+                    . ' has been confirmed for '
+                    . $appointment->start_at->format('d M Y')
+                    . ' at '
+                    . $appointment->start_at->format('h:i A')
+                    . '.'
+            );
+        }
+        
+        return $response;        
     }
-
 
     public function requests()
     {
@@ -782,6 +890,35 @@ class AppointmentController extends Controller
             ->paginate(15);
 
         return view('manager.appointments.requests', compact('appointments'));
+    }
+
+
+    private function notifyAssignedInstructors(
+        Appointment $appointment,
+        string $title,
+        string $message
+    ): void {
+        $appointment->loadMissing(['instructors', 'course']);
+
+        $url = route('instructor.lessons.show', $appointment->id, false);
+        
+        foreach ($appointment->instructors as $instructor) {
+            // Retrieve the actual User model through the relationship.
+            $user = $instructor->user()->first();
+
+            // Some instructors may not yet have login accounts.
+            if (!$user) {
+                continue;
+            }
+
+            $user->notify(
+                new InstructorMessageNotification(
+                    $title,
+                    $message,
+                    $url
+                )
+            );
+        }
     }
 
 

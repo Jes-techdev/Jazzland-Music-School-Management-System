@@ -210,6 +210,26 @@
             <span class="menu-text"> My Profile</span>
         </a>
 
+        
+        <a href="{{ route('instructor.notifications') }}"
+            class="{{ request()->routeIs('instructor.notifications*') ? 'active' : '' }}">
+            <i class="bi bi-bell"></i>
+            <span class="menu-text"> Notifications</span>
+
+            @php
+                $unreadNotificationCount = auth()->user()
+                    ->unreadNotifications()
+                    ->count();
+            @endphp
+
+            @if($unreadNotificationCount > 0)
+                <span class="badge bg-danger rounded-pill ms-auto">
+                    {{ $unreadNotificationCount > 99 ? '99+' : $unreadNotificationCount }}
+                </span>
+            @endif
+        </a>
+
+
     @endif
 
     <hr class="border-secondary">

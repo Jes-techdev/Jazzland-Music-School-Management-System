@@ -252,6 +252,28 @@ Route::middleware(['auth', 'role:instructor'])->group(function () {
         [\App\Http\Controllers\Instructor\InstructorProfileController::class, 'updatePassword']
     )->name('instructor.profile.password');
 
+    Route::get('/instructor/notifications', [
+        \App\Http\Controllers\Instructor\InstructorNotificationController::class,
+        'index'
+    ])->name('instructor.notifications');
+    
+    Route::post('/instructor/notifications/{notificationId}/read', [
+        \App\Http\Controllers\Instructor\InstructorNotificationController::class,
+        'markAsRead'
+    ])->name('instructor.notifications.read');
+    
+    Route::post('/instructor/notifications/read-all', [
+        \App\Http\Controllers\Instructor\InstructorNotificationController::class,
+        'markAllAsRead'
+    ])->name('instructor.notifications.read-all');
+
+
+    Route::get('/instructor/notifications/{notificationId}/open', [
+        \App\Http\Controllers\Instructor\InstructorNotificationController::class,
+        'open'
+    ])->name('instructor.notifications.open');
+
+
 });
 
 
