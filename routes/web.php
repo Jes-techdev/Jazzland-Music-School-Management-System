@@ -67,6 +67,16 @@ Route::middleware(['auth', 'role:manager'])
         Route::resource('instructors', InstructorController::class)
         ->except(['destroy']);
 
+        Route::post(
+            'instructors/{instructor}/create-account',
+            [InstructorController::class, 'createAccount']
+        )->name('instructors.create-account');
+
+        Route::post(
+            'instructors/{instructor}/send-password-setup',
+            [InstructorController::class, 'sendPasswordSetup']
+        )->name('instructors.send-password-setup');
+
         Route::get(
             'instructors/{instructor}/availability',
             [InstructorAvailabilityController::class, 'index']
