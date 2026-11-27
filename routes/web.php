@@ -169,8 +169,10 @@ Route::middleware(['auth', 'role:manager'])
 
 Route::middleware(['auth', 'role:instructor'])->group(function () {
 
-    Route::view('/instructor/dashboard', 'dashboards.instructor')
-        ->name('instructor.dashboard');
+    Route::get(
+        '/instructor/dashboard',
+        [\App\Http\Controllers\Instructor\InstructorDashboardController::class, 'index']
+    )->name('instructor.dashboard');
 
 });
 
