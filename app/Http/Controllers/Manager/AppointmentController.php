@@ -359,6 +359,12 @@ class AppointmentController extends Controller
             $appointment = Appointment::whereKey($appointment->id)
                 ->lockForUpdate()
                 ->firstOrFail();
+            
+            if (in_array($appointment->status, ['cancelled', 'completed', 'no_show'], true)) {
+                throw ValidationException::withMessages([
+                    'appointment' => 'This appointment can no longer be edited.',
+                ]);
+            }
 
             $instructors = Instructor::whereIn('id', $data['instructor_ids'])
                 ->orderBy('id')
@@ -522,6 +528,7 @@ class AppointmentController extends Controller
     }
 
         
+    
     public function updateStatus(Request $request, Appointment $appointment)
     {
         $data = $request->validate([
@@ -529,6 +536,7 @@ class AppointmentController extends Controller
         ]);
 
         return DB::transaction(function () use ($data, $appointment) {
+
             $appointment = Appointment::whereKey($appointment->id)
                 ->lockForUpdate()
                 ->firstOrFail();
@@ -539,15 +547,191 @@ class AppointmentController extends Controller
 
             $newStatus = $data['status'];
 
-            if (
-                $newStatus === 'confirmed'
-                && ! $appointment->instructors()->exists()
-            ) {
-                return back()->with(
-                    'error',
-                    'Please assign at least one instructor before confirming this appointment.'
-                );
+            /*
+            |--------------------------------------------------------------------------
+            | Confirmation checks
+            |--------------------------------------------------------------------------
+            */
+
+            if ($newStatus === 'confirmed') {
+
+                $course = Course::with('instruments')
+                    ->findOrFail($appointment->course_id);
+
+                if (!$course->is_active) {
+                    throw ValidationException::withMessages([
+                        'appointment' => 'This course is no longer active.',
+                    ]);
+                }
+
+                if (!in_array($course->lesson_type, [$appointment->appointment_type, 'both'], true)) {
+                    throw ValidationException::withMessages([
+                        'appointment' => 'This course does not support the appointment type.',
+                    ]);
+                }
+
+                $start = Carbon::parse($appointment->start_at);
+                $end = Carbon::parse($appointment->end_at);
+
+                if (!$start->isSameDay($end)) {
+                    throw ValidationException::withMessages([
+                        'appointment' => 'The appointment must start and finish on the same day.',
+                    ]);
+                }
+
+                $instructorIds = $appointment->instructors()
+                    ->pluck('instructors.id')
+                    ->all();
+
+                $studentIds = $appointment->students()
+                    ->pluck('students.id')
+                    ->all();
+
+                if (empty($instructorIds)) {
+                    throw ValidationException::withMessages([
+                        'appointment' => 'Please assign at least one instructor before confirming this appointment.',
+                    ]);
+                }
+
+                if (empty($studentIds)) {
+                    throw ValidationException::withMessages([
+                        'appointment' => 'At least one student must be assigned before confirmation.',
+                    ]);
+                }
+
+                if (
+                    $appointment->appointment_type === 'individual'
+                    && count($studentIds) !== 1
+                ) {
+                    throw ValidationException::withMessages([
+                        'appointment' => 'An individual appointment must have exactly one student.',
+                    ]);
+                }
+
+                if (
+                    !$appointment->capacity
+                    || count($studentIds) > $appointment->capacity
+                ) {
+                    throw ValidationException::withMessages([
+                        'appointment' => 'The appointment capacity is invalid or insufficient for the assigned students.',
+                    ]);
+                }
+
+                $instructors = Instructor::whereIn('id', $instructorIds)
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get();
+
+                $students = Student::whereIn('id', $studentIds)
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get();
+
+                if (
+                    $instructors->count() !== count($instructorIds)
+                    || $instructors->contains(fn ($i) => $i->status !== 'active')
+                ) {
+                    throw ValidationException::withMessages([
+                        'appointment' => 'One or more assigned instructors are inactive.',
+                    ]);
+                }
+
+                if (
+                    $students->count() !== count($studentIds)
+                    || $students->contains(fn ($s) => $s->status !== 'active')
+                ) {
+                    throw ValidationException::withMessages([
+                        'appointment' => 'One or more assigned students are inactive.',
+                    ]);
+                }
+
+                $instrumentIds = $course->instruments->pluck('id');
+
+                foreach ($instructors as $instructor) {
+
+                    // Check instructor qualifications
+                    if (
+                        $instrumentIds->isNotEmpty()
+                        && !$instructor->instruments()
+                            ->whereIn('instruments.id', $instrumentIds)
+                            ->exists()
+                    ) {
+                        throw ValidationException::withMessages([
+                            'appointment' => "{$instructor->first_name} {$instructor->last_name} does not have the required course qualification.",
+                        ]);
+                    }
+
+                    // Check weekly availability
+                    $available = $instructor->availabilities()
+                        ->where('day_of_week', $start->dayOfWeek)
+                        ->where('is_available', true)
+                        ->where('start_time', '<=', $start->format('H:i:s'))
+                        ->where('end_time', '>=', $end->format('H:i:s'))
+                        ->exists();
+
+                    if (!$available) {
+                        throw ValidationException::withMessages([
+                            'appointment' => "{$instructor->first_name} {$instructor->last_name} is not available at the scheduled time.",
+                        ]);
+                    }
+
+                    // Check other appointments
+                    $conflict = Appointment::whereIn('status', ['pending', 'confirmed'])
+                        ->where('id', '!=', $appointment->id)
+                        ->where('start_at', '<', $end)
+                        ->where('end_at', '>', $start)
+                        ->whereHas('instructors', function ($query) use ($instructor) {
+                            $query->where('instructors.id', $instructor->id);
+                        })
+                        ->exists();
+
+                    if ($conflict) {
+                        throw ValidationException::withMessages([
+                            'appointment' => "{$instructor->first_name} {$instructor->last_name} has another appointment at that time.",
+                        ]);
+                    }
+
+                    // Check vacation programme sessions
+                    $programmeConflict = DB::table('programme_sessions')
+                        ->where('instructor_id', $instructor->id)
+                        ->where('session_date', $start->toDateString())
+                        ->where('status', 'scheduled')
+                        ->where('start_time', '<', $end->format('H:i:s'))
+                        ->where('end_time', '>', $start->format('H:i:s'))
+                        ->exists();
+
+                    if ($programmeConflict) {
+                        throw ValidationException::withMessages([
+                            'appointment' => "{$instructor->first_name} {$instructor->last_name} has a programme session at that time.",
+                        ]);
+                    }
+                }
+
+                // Check student appointment conflicts
+                foreach ($students as $student) {
+
+                    $conflict = Appointment::whereIn('status', ['pending', 'confirmed'])
+                        ->where('id', '!=', $appointment->id)
+                        ->where('start_at', '<', $end)
+                        ->where('end_at', '>', $start)
+                        ->whereHas('students', function ($query) use ($student) {
+                            $query->where('students.id', $student->id);
+                        })
+                        ->exists();
+
+                    if ($conflict) {
+                        throw ValidationException::withMessages([
+                            'appointment' => "{$student->first_name} {$student->last_name} has another appointment at that time.",
+                        ]);
+                    }
+                }
             }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Completion and no-show checks
+            |--------------------------------------------------------------------------
+            */
 
             if (
                 in_array($newStatus, ['completed', 'no_show'], true)
@@ -558,6 +742,12 @@ class AppointmentController extends Controller
                     'An appointment cannot be completed or marked as no-show before its scheduled end time.'
                 );
             }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Update appointment status and history
+            |--------------------------------------------------------------------------
+            */
 
             $oldStatus = $appointment->status;
 
@@ -577,15 +767,18 @@ class AppointmentController extends Controller
         });
     }
 
+
     public function requests()
     {
         $appointments = Appointment::with([
             'course',
             'students',
             'instructors',
+            'requester',
         ])
             ->whereNotNull('requested_by')
-            ->latest()
+            ->where('status', 'pending')
+            ->latest('created_at')
             ->paginate(15);
 
         return view('manager.appointments.requests', compact('appointments'));

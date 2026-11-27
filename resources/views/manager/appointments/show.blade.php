@@ -17,54 +17,71 @@
 </div>
 
 
+
 @if(!in_array($appointment->status, ['cancelled', 'completed', 'no_show']))
     <div class="d-flex flex-wrap gap-2 mb-4">
+
         @if($appointment->status === 'pending')
-            <form method="POST"
-                action="{{ route('manager.appointments.status', $appointment) }}">
-                @csrf
-                @method('PATCH')
+            @if($appointment->instructors->isNotEmpty())
+                <form method="POST"
+                      action="{{ route('manager.appointments.status', $appointment) }}">
+                    @csrf
+                    @method('PATCH')
 
-                <input type="hidden" name="status" value="confirmed">
+                    <input type="hidden" name="status" value="confirmed">
 
-                <button type="submit"
-                        class="btn btn-success"
-                        onclick="return confirm('Are you sure you want to confirm this appointment?')">
-                    <i class="bi bi-check-circle"></i> Confirm Appointment
-                </button>
-            </form>
+                    <button type="submit"
+                            class="btn btn-success"
+                            onclick="return confirm('Are you sure you want to confirm this appointment?')">
+                        <i class="bi bi-check-circle"></i> Approve & Confirm
+                    </button>
+                </form>
+            @else
+                <div class="alert alert-warning w-100 mb-0">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    This booking request has no instructor assigned yet.
+                    Please assign an instructor before confirming it.
+                </div>
+            @endif
         @endif
 
         <a href="{{ route('manager.appointments.edit', $appointment) }}"
            class="btn btn-primary">
-            <i class="bi bi-pencil"></i> Edit / Reschedule
+            <i class="bi bi-pencil"></i>
+            @if($appointment->status === 'pending')
+                Review / Assign Instructor
+            @else
+                Edit / Reschedule
+            @endif
         </a>
 
-        <form method="POST"
-              action="{{ route('manager.appointments.status', $appointment) }}">
-            @csrf
-            @method('PATCH')
+        @if($appointment->status === 'confirmed')
+            <form method="POST"
+                  action="{{ route('manager.appointments.status', $appointment) }}">
+                @csrf
+                @method('PATCH')
 
-            <input type="hidden" name="status" value="completed">
+                <input type="hidden" name="status" value="completed">
 
-            <button class="btn btn-success"
-                    onclick="return confirm('Mark this appointment as completed?')">
-                Mark Completed
-            </button>
-        </form>
+                <button class="btn btn-success"
+                        onclick="return confirm('Mark this appointment as completed?')">
+                    Mark Completed
+                </button>
+            </form>
 
-        <form method="POST"
-              action="{{ route('manager.appointments.status', $appointment) }}">
-            @csrf
-            @method('PATCH')
+            <form method="POST"
+                  action="{{ route('manager.appointments.status', $appointment) }}">
+                @csrf
+                @method('PATCH')
 
-            <input type="hidden" name="status" value="no_show">
+                <input type="hidden" name="status" value="no_show">
 
-            <button class="btn btn-outline-secondary"
-                    onclick="return confirm('Mark this appointment as a no-show?')">
-                Mark No-Show
-            </button>
-        </form>
+                <button class="btn btn-outline-secondary"
+                        onclick="return confirm('Mark this appointment as a no-show?')">
+                    Mark No-Show
+                </button>
+            </form>
+        @endif
 
         <button class="btn btn-outline-danger"
                 type="button"
@@ -97,12 +114,24 @@
     </div>
 @endif
 
+
 @if(session('success'))
     <div class="alert alert-success">{{ session('success') }}</div>
 @endif
 
 @if(session('error'))
     <div class="alert alert-danger">{{ session('error') }}</div>
+@endif
+
+@if($errors->any())
+    <div class="alert alert-danger">
+        <strong>Please check the following:</strong>
+        <ul class="mb-0 mt-2">
+            @foreach($errors->all() as $error)
+                <li>{{ $error }}</li>
+            @endforeach
+        </ul>
+    </div>
 @endif
 
 

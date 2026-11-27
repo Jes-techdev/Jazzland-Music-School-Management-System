@@ -151,6 +151,8 @@ Route::middleware(['auth', 'role:manager'])
         Route::patch('appointments/{appointment}/status', [AppointmentController::class, 'updateStatus'])
             ->name('appointments.status');
 
+        
+
 });
 
 
@@ -216,6 +218,14 @@ Route::middleware(['auth', 'role:parent'])
         Route::post('/appointments', [
             ParentAppointmentController::class, 'store'
         ])->name('appointments.store');
+
+        Route::get('/appointments/{appointment}', [
+            ParentAppointmentController::class, 'show'
+        ])->name('appointments.show');
+        
+        Route::post('/appointments/{appointment}/cancel', [
+            ParentAppointmentController::class, 'cancel'
+        ])->name('appointments.cancel');
 });
 
 

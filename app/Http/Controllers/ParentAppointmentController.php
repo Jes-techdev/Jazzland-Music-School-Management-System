@@ -146,4 +146,69 @@ class ParentAppointmentController extends Controller
 
         return view('parent.appointments.index', compact('appointments'));
     }
+
+
+    public function show(Appointment $appointment)
+    {
+        $studentIds = $this->guardian()->students()->pluck('students.id');
+
+        $appointment = Appointment::with([
+            'course',
+            'students',
+            'instructors',
+            'history.user',
+        ])
+            ->where('requested_by', auth()->id())
+            ->whereHas('students', function ($query) use ($studentIds) {
+                $query->whereIn('students.id', $studentIds);
+            })
+            ->findOrFail($appointment->id);
+
+        return view('parent.appointments.show', compact('appointment'));
+    }
+
+    public function cancel(Request $request, Appointment $appointment)
+    {
+        $data = $request->validate([
+            'cancellation_reason' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $studentIds = $this->guardian()->students()->pluck('students.id');
+
+        return DB::transaction(function () use ($appointment, $data, $studentIds) {
+
+            $appointment = Appointment::whereKey($appointment->id)
+                ->where('requested_by', auth()->id())
+                ->whereHas('students', function ($query) use ($studentIds) {
+                    $query->whereIn('students.id', $studentIds);
+                })
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($appointment->status !== 'pending') {
+                return back()->with(
+                    'error',
+                    'Only pending lesson requests can be cancelled by parents.'
+                );
+            }
+
+            $appointment->update([
+                'status' => 'cancelled',
+                'cancellation_reason' => $data['cancellation_reason'] ?? 'Cancelled by parent.',
+            ]);
+
+            $appointment->history()->create([
+                'user_id' => auth()->id(),
+                'action' => 'cancelled',
+                'old_status' => 'pending',
+                'new_status' => 'cancelled',
+                'notes' => 'Lesson request cancelled by parent.',
+            ]);
+
+            return redirect()
+                ->route('parent.appointments.index')
+                ->with('success', 'Your lesson request has been cancelled.');
+        });
+    }
+
 }

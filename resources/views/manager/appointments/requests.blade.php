@@ -1,148 +1,155 @@
+
 @extends('layouts.dashboard')
 
+@section('title', 'Booking Requests')
+
 @section('content')
+<div class="container-fluid">
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h3 class="mb-1">Booking Requests</h3>
-        <p class="text-muted mb-0">
-            Review appointment requests submitted by parents.
-        </p>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2>Booking Requests</h2>
+            <p class="text-muted mb-0">
+                Review lesson requests submitted by parents.
+            </p>
+        </div>
+
+        <a href="{{ route('manager.appointments.index') }}"
+           class="btn btn-outline-secondary">
+            All Appointments
+        </a>
     </div>
 
-    <a href="{{ route('manager.appointments.index') }}"
-       class="btn btn-outline-secondary">
-        All Appointments
-    </a>
-</div>
+    <div class="card shadow-sm">
+        <div class="card-body">
 
-@if(session('success'))
-    <div class="alert alert-success">
-        {{ session('success') }}
-    </div>
-@endif
+            @if(session('success'))
+                <div class="alert alert-success">
+                    {{ session('success') }}
+                </div>
+            @endif
 
-@if(session('error'))
-    <div class="alert alert-danger">
-        {{ session('error') }}
-    </div>
-@endif
+            @if($errors->any())
+                <div class="alert alert-danger">
+                    @foreach($errors->all() as $error)
+                        <div>{{ $error }}</div>
+                    @endforeach
+                </div>
+            @endif
 
-<div class="card">
-    <div class="card-body">
+            @if($appointments->isEmpty())
+                <div class="alert alert-info mb-0">
+                    There are currently no pending booking requests.
+                </div>
+            @else
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
 
-        @if($appointments->isEmpty())
-            <div class="text-center py-5">
-                <h5>No booking requests found</h5>
-                <p class="text-muted mb-0">
-                    Parent-submitted appointment requests will appear here.
-                </p>
-            </div>
-        @else
-
-            <div class="table-responsive">
-                <table class="table table-hover align-middle">
-
-                    <thead>
-                        <tr>
-                            <th>Request</th>
-                            <th>Course</th>
-                            <th>Student(s)</th>
-                            <th>Requested Date</th>
-                            <th>Instructor(s)</th>
-                            <th>Status</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-
-                    <tbody>
-                        @foreach($appointments as $appointment)
+                        <thead>
                             <tr>
-                                <td>#{{ $appointment->id }}</td>
+                                <th>Parent / Requester</th>
+                                <th>Course</th>
+                                <th>Student(s)</th>
+                                <th>Lesson Type</th>
+                                <th>Requested Date & Time</th>
+                                <th>Instructor</th>
+                                <th>Submitted</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
 
-                                <td>
-                                    {{ $appointment->course->name ?? 'N/A' }}
-                                </td>
+                        <tbody>
+                            @foreach($appointments as $appointment)
+                                <tr>
+                                    <td>
+                                        <strong>
+                                            {{ $appointment->requester?->name ?? 'Unknown requester' }}
+                                        </strong>
 
-                                <td>
-                                    @foreach($appointment->students as $student)
-                                        <div>
-                                            {{ $student->first_name }}
-                                            {{ $student->last_name }}
+                                        <div class="small text-muted">
+                                            {{ $appointment->requester?->email ?? 'No email available' }}
                                         </div>
-                                    @endforeach
-                                </td>
+                                    </td>
 
-                                <td>
-                                    {{ $appointment->start_at->format('d M Y') }}
-                                    <br>
-                                    <small class="text-muted">
-                                        {{ $appointment->start_at->format('h:i A') }}
-                                        -
-                                        {{ $appointment->end_at->format('h:i A') }}
-                                    </small>
-                                </td>
+                                    <td>
+                                        {{ $appointment->course->name }}
+                                    </td>
 
-                                <td>
-                                    @forelse($appointment->instructors as $instructor)
-                                        <div>
-                                            {{ $instructor->first_name }}
-                                            {{ $instructor->last_name }}
+                                    <td>
+                                        @forelse($appointment->students as $student)
+                                            <div>
+                                                {{ $student->first_name }}
+                                                {{ $student->last_name }}
+                                            </div>
+                                        @empty
+                                            <span class="text-muted">
+                                                No student assigned
+                                            </span>
+                                        @endforelse
+                                    </td>
+
+                                    <td>
+                                        {{ ucfirst($appointment->appointment_type) }}
+                                    </td>
+
+                                    <td>
+                                        <strong>
+                                            {{ $appointment->start_at->format('d M Y') }}
+                                        </strong>
+
+                                        <div class="small text-muted">
+                                            {{ $appointment->start_at->format('h:i A') }}
+                                            –
+                                            {{ $appointment->end_at->format('h:i A') }}
                                         </div>
-                                    @empty
-                                        <span class="text-muted">
-                                            Not assigned
-                                        </span>
-                                    @endforelse
-                                </td>
+                                    </td>
 
-                                <td>
-                                    @if($appointment->status === 'pending')
+                                    <td>
+                                        @forelse($appointment->instructors as $instructor)
+                                            <div>
+                                                {{ $instructor->first_name }}
+                                                {{ $instructor->last_name }}
+                                            </div>
+                                        @empty
+                                            <span class="text-warning">
+                                                Not assigned
+                                            </span>
+                                        @endforelse
+                                    </td>
+
+                                    <td>
+                                        {{ $appointment->created_at->format('d M Y') }}
+
+                                        <div class="small text-muted">
+                                            {{ $appointment->created_at->format('h:i A') }}
+                                        </div>
+                                    </td>
+
+                                    <td>
                                         <span class="badge bg-warning text-dark">
                                             Pending
                                         </span>
-                                    @elseif($appointment->status === 'confirmed')
-                                        <span class="badge bg-success">
-                                            Confirmed
-                                        </span>
-                                    @elseif($appointment->status === 'cancelled')
-                                        <span class="badge bg-danger">
-                                            Cancelled
-                                        </span>
-                                    @else
-                                        <span class="badge bg-secondary">
-                                            {{ ucfirst(str_replace('_', ' ', $appointment->status)) }}
-                                        </span>
-                                    @endif
-                                </td>
+                                    </td>
 
-                                <td>
-                                    <a href="{{ route('manager.appointments.show', $appointment) }}"
-                                       class="btn btn-sm btn-outline-primary">
-                                        View
-                                    </a>
-
-                                    @if(in_array($appointment->status, ['pending', 'confirmed']))
-                                        <a href="{{ route('manager.appointments.edit', $appointment) }}"
-                                           class="btn btn-sm btn-outline-secondary">
-                                            Edit
+                                    <td>
+                                        <a href="{{ route('manager.appointments.show', $appointment) }}"
+                                           class="btn btn-sm btn-primary">
+                                            <i class="bi bi-eye"></i> Review
                                         </a>
-                                    @endif
-                                </td>
-                            </tr>
-                        @endforeach
-                    </tbody>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
 
-                </table>
-            </div>
+                    </table>
+                </div>
 
-            <div class="mt-3">
                 {{ $appointments->links() }}
-            </div>
+            @endif
 
-        @endif
-
+        </div>
     </div>
-</div>
 
+</div>
 @endsection
