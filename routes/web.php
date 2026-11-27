@@ -231,6 +231,27 @@ Route::middleware(['auth', 'role:instructor'])->group(function () {
         'calendarEvents'
     ])->name('instructor.calendar.events');
 
+    // Instructor Profile
+    Route::get(
+        '/instructor/profile',
+        [\App\Http\Controllers\Instructor\InstructorProfileController::class, 'index']
+    )->name('instructor.profile');
+
+    Route::get(
+        '/instructor/profile/edit',
+        [\App\Http\Controllers\Instructor\InstructorProfileController::class, 'edit']
+    )->name('instructor.profile.edit');
+
+    Route::put(
+        '/instructor/profile',
+        [\App\Http\Controllers\Instructor\InstructorProfileController::class, 'update']
+    )->name('instructor.profile.update');
+
+    Route::put(
+        '/instructor/profile/password',
+        [\App\Http\Controllers\Instructor\InstructorProfileController::class, 'updatePassword']
+    )->name('instructor.profile.password');
+
 });
 
 

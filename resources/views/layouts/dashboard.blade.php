@@ -204,6 +204,12 @@
             <span class="menu-text"> Attendance History</span>
         </a>
 
+        <a href="{{ route('instructor.profile') }}"
+            class="{{ request()->routeIs('instructor.profile*') ? 'active' : '' }}">
+            <i class="bi bi-person-circle"></i>
+            <span class="menu-text"> My Profile</span>
+        </a>
+
     @endif
 
     <hr class="border-secondary">
