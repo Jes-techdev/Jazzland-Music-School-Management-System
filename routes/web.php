@@ -5,6 +5,7 @@ use App\Http\Controllers\Manager\StudentController;
 use App\Http\Controllers\Manager\GuardianController;
 use App\Http\Controllers\Manager\InstructorController;
 use App\Http\Controllers\Manager\InstructorAvailabilityController;
+use App\Http\Controllers\Instructor\InstructorDashboardController;
 use App\Http\Controllers\Manager\CourseController;
 use App\Http\Controllers\Manager\ProgrammeSessionController;
 use App\Http\Controllers\Manager\ProgrammeEnrolmentController;
@@ -173,6 +174,62 @@ Route::middleware(['auth', 'role:instructor'])->group(function () {
         '/instructor/dashboard',
         [\App\Http\Controllers\Instructor\InstructorDashboardController::class, 'index']
     )->name('instructor.dashboard');
+
+    Route::get(
+        '/instructor/lessons',
+        [\App\Http\Controllers\Instructor\InstructorDashboardController::class, 'lessons']
+    )->name('instructor.lessons');
+
+    Route::get(
+        '/instructor/lessons/{appointmentId}',
+        [\App\Http\Controllers\Instructor\InstructorDashboardController::class, 'showLesson']
+    )->name('instructor.lessons.show');
+
+    // Instructor Availability
+    Route::get(
+        '/instructor/availability',
+        [\App\Http\Controllers\Instructor\InstructorAvailabilityController::class, 'index']
+    )->name('instructor.availability');
+
+    Route::post(
+        '/instructor/availability',
+        [\App\Http\Controllers\Instructor\InstructorAvailabilityController::class, 'store']
+    )->name('instructor.availability.store');
+
+    Route::delete(
+        '/instructor/availability/{availability}',
+        [\App\Http\Controllers\Instructor\InstructorAvailabilityController::class, 'destroy']
+    )->name('instructor.availability.destroy');
+
+    Route::get('/lessons/{appointmentId}/attendance', [
+        InstructorDashboardController::class,
+        'attendance'
+    ])->name('instructor.lessons.attendance');
+    
+    Route::post('/lessons/{appointmentId}/attendance', [
+        InstructorDashboardController::class,
+        'saveAttendance'
+    ])->name('instructor.lessons.attendance.save');
+
+    Route::post('/lessons/{appointmentId}/complete', [
+        InstructorDashboardController::class,
+        'completeLesson'
+    ])->name('instructor.lessons.complete');
+
+    Route::get('/attendance-history', [
+        InstructorDashboardController::class,
+        'attendanceHistory'
+    ])->name('instructor.attendance-history');
+
+    Route::get('/calendar', [
+        InstructorDashboardController::class,
+        'calendar'
+    ])->name('instructor.calendar');
+    
+    Route::get('/calendar/events', [
+        InstructorDashboardController::class,
+        'calendarEvents'
+    ])->name('instructor.calendar.events');
 
 });
 

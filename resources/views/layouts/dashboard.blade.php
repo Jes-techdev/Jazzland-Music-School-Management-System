@@ -12,6 +12,8 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css"
         rel="stylesheet">
 
+    @vite(['resources/js/app.js'])
+
     <style>
         body {
             background: #f5f7fb;
@@ -117,6 +119,7 @@
 
 <body>
 
+
 <aside class="sidebar">
 
     <h4>
@@ -124,49 +127,84 @@
         <span class="menu-text">Music School</span>
     </h4>
 
-    <a href="{{ route('dashboard') }}" class="active">
-        <i class="bi bi-grid"></i>
-        <span class="menu-text"> Dashboard</span>
-    </a>
+    {{-- MANAGER NAVIGATION --}}
+    @if(auth()->user()->role->name === 'manager')
 
-    <hr class="border-secondary">
+        <a href="{{ route('dashboard') }}">
+            <i class="bi bi-grid"></i>
+            <span class="menu-text"> Dashboard</span>
+        </a>
 
-    <small class="text-secondary menu-text">MANAGEMENT</small>
+        <hr class="border-secondary">
 
-    <a href="{{ auth()->user()->role->name === 'manager' ? route('manager.students.index') : '#' }}">
-        <i class="bi bi-people"></i> Students
-    </a>
+        <small class="text-secondary menu-text">MANAGEMENT</small>
 
-    <a href="{{ auth()->user()->role->name === 'manager' ? route('manager.guardians.index') : '#' }}">
-        <i class="bi bi-person-hearts"></i> Guardians
-    </a>
+        <a href="{{ route('manager.students.index') }}">
+            <i class="bi bi-people"></i> Students
+        </a>
 
-    <a href="{{ auth()->user()->role->name === 'manager' ? route('manager.instructors.index') : '#' }}">
-        <i class="bi bi-person-workspace"></i> Instructors
-    </a>
+        <a href="{{ route('manager.guardians.index') }}">
+            <i class="bi bi-person-hearts"></i> Guardians
+        </a>
 
-    <a href="{{ auth()->user()->role->name === 'manager' ? route('manager.courses.index') : '#' }}">
-        <i class="bi bi-music-note-list"></i> Courses
-    </a>
+        <a href="{{ route('manager.instructors.index') }}">
+            <i class="bi bi-person-workspace"></i> Instructors
+        </a>
 
-    <a href="{{ auth()->user()->role->name === 'manager' ? route('manager.programmes.index') : '#'}}"
-        class="sidebar-link">
-        <i class="bi bi-calendar-event"></i>
-        <span>Vacation Programmes</span>
-    </a>
+        <a href="{{ route('manager.courses.index') }}">
+            <i class="bi bi-music-note-list"></i> Courses
+        </a>
 
+        <a href="{{ route('manager.programmes.index') }}">
+            <i class="bi bi-calendar-event"></i> Vacation Programmes
+        </a>
 
-    <a href="{{ auth()->user()->role->name === 'manager' ? route('manager.appointments.index') : '#'}}"
-    class="nav-link">
-        <i class="bi bi-calendar-check"></i>
-        Appointments
-    </a>
+        <a href="{{ route('manager.appointments.index') }}">
+            <i class="bi bi-calendar-check"></i> Appointments
+        </a>
 
-    <a href="{{ auth()->user()->role->name === 'manager' ? route('manager.appointments.requests') : '#'}}"
-    class="nav-link">
-        <i class="bi bi-inbox me-2"></i>
-        Booking Requests
-    </a>
+        <a href="{{ route('manager.appointments.requests') }}">
+            <i class="bi bi-inbox"></i> Booking Requests
+        </a>
+
+    {{-- INSTRUCTOR NAVIGATION --}}
+    @elseif(auth()->user()->role->name === 'instructor')
+
+        <a href="{{ route('instructor.dashboard') }}"
+            class="{{ request()->routeIs('instructor.dashboard') ? 'active' : '' }}">
+            <i class="bi bi-grid"></i>
+            <span class="menu-text"> Dashboard</span>
+        </a>
+
+        <hr class="border-secondary">
+
+        <small class="text-secondary menu-text">TEACHING</small>
+
+        <a href="{{ route('instructor.calendar') }}"
+            class="{{ request()->routeIs('instructor.calendar*') ? 'active' : '' }}">
+            <i class="bi bi-calendar3"></i>
+            <span class="menu-text"> My Calendar</span>
+        </a>
+
+        <a href="{{ route('instructor.lessons') }}"
+            class="{{ request()->routeIs('instructor.lessons') ? 'active' : '' }}">
+            <i class="bi bi-calendar-check"></i>
+            <span class="menu-text"> My Lessons</span>
+        </a>
+
+        <a href="{{ route('instructor.availability') }}"
+            class="{{ request()->routeIs('instructor.availability*') ? 'active' : '' }}">
+            <i class="bi bi-clock-history"></i>
+            <span class="menu-text"> My Availability</span>
+        </a>
+
+        <a href="{{ route('instructor.attendance-history') }}"
+            class="{{ request()->routeIs('instructor.attendance-history') ? 'active' : '' }}">
+            <i class="bi bi-clipboard-check"></i>
+            <span class="menu-text"> Attendance History</span>
+        </a>
+
+    @endif
 
     <hr class="border-secondary">
 
@@ -176,6 +214,7 @@
     </a>
 
 </aside>
+
 
 
 <main class="main-content">

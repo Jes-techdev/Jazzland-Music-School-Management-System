@@ -39,6 +39,12 @@ class Appointment extends Model
     public function students(): BelongsToMany
     {
         return $this->belongsToMany(Student::class)
+            ->withPivot([
+                'attendance_status',
+                'attendance_notes',
+                'attendance_marked_at',
+                'attendance_marked_by',
+            ])
             ->withTimestamps();
     }
 
